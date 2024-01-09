@@ -1,0 +1,17 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=XFreeRDP GUI
+GenericName=XFreeRDP GUI
+Comment=GUI for XFreeRDP
+Exec=xfreerdp-gui
+Icon=computer-symbolic
+Terminal=false
+X-MultipleArgs=false
+Categories=Utility;
+Actions=saved;
+X-KDE-SubstituteUID=false
+
+[Desktop Action saved]
+Exec=xfreerdp-gui --saved
+Name=Run with saved configuration

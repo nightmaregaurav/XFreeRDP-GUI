@@ -1,0 +1,139 @@
+#!/bin/bash
+
+get_user_input() {
+    user_input=$(zenity \
+        --forms \
+        --title="XFreeRDP GUI" \
+        --text="Enter the following values:" \
+        --add-entry="Window Name:" \
+        --add-entry="IP address:" \
+        --add-entry="Port:" \
+        --add-entry="Username:" \
+        --add-password="Password:" \
+        --separator="/delimiter/" \
+        --forms-date-format="%Y-%m-%d %H:%M:%S" \
+        --ok-label="Continue" \
+        --cancel-label="Exit" \
+    2>/dev/null)
+
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+
+    RDP_WINDOW_NAME=$(echo "$user_input" | awk -F "/delimiter/" '{print $1}')
+    RDP_IP=$(echo "$user_input" | awk -F "/delimiter/" '{print $2}')
+    RDP_PORT=$(echo "$user_input" | awk -F "/delimiter/" '{print $3}')
+    RDP_USERNAME=$(echo "$user_input" | awk -F "/delimiter/" '{print $4}')
+    RDP_PASSWORD=$(echo "$user_input" | awk -F "/delimiter/" '{print $5}')
+}
+
+get_feature_flags() {
+    user_flags_input=$(zenity \
+        --list \
+        --title="XFreeRDP GUI - Select Features" \
+        --text="Select the Features to enable:" \
+        --checklist \
+        --print-column=2 \
+        --column="Select" \
+        --column="Flag" \
+        --column="Description" \
+        --separator="/delimiter/" \
+        --ok-label="Continue" \
+        --cancel-label="Exit" \
+        TRUE " +dynamic-resolution" "Update resolution on Resize" \
+        TRUE " +window-drag" "Enable full window drag" \
+        TRUE " +home-drive" "Enable Redirect user home as share" \
+        TRUE " +auto-reconnect" "Enable Automatic reconnection" \
+        TRUE " +clipboard" "Enable Clipboard redirection" \
+        TRUE " +offscreen-cache" "Enable Offscreen Bitmap Cache" \
+        TRUE " +multitouch" "Enable Redirect multitouch input" \
+        TRUE " -heartbeat" "Disable Support heartbeat PDUs" \
+        TRUE " +gestures" "Enable Consumption of multitouch input" \
+        TRUE " +aero" "Enable Desktop composition" \
+        TRUE " +bitmap-cache" "Enable Bitmap caching" \
+        TRUE " +disp" "Enable Display control" \
+        TRUE " +sound" "Listen remote desktop sound locally" \
+        TRUE " +microphone" "Allow remote desktop to use local microphone" \
+        TRUE " +video" "Redirect Multimedia Video" \
+    2>/dev/null)
+
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+
+    RDP_FLAGS=$(echo "$user_flags_input" | awk -F "/delimiter/" '{ for(i=1; i<=NF; i++) { sub(/^[ \t]+/, "", $i); sub(/[ \t]+$/, "", $i); print $i } }')
+    RDP_FLAGS=$(echo "$RDP_FLAGS" | tr '\n' ' ')
+    RDP_FLAGS=$(echo "$RDP_FLAGS" | sed 's/ *$//g')
+}
+
+ask_to_save() {
+    zenity --question --title="Save Values?" --text="Do you want to save these values?" --ok-label="Save" --cancel-label="Don't Save"
+    if [ $? -eq 0 ]; then
+        SAVE="True"
+    else
+        SAVE="False"
+    fi
+}
+
+print_array_as_array() {
+    local array=("$@")
+    value="(\n"
+    for i in "${array[@]}"; do
+        value="$value\"$i\"\n"
+    done
+    value="$value)"
+    echo "$value"
+}
+
+save_to_file() {
+    echo -e "RDP_WINDOW_NAME=$RDP_WINDOW_NAME\nRDP_IP=$RDP_IP\nRDP_PORT=$RDP_PORT\nRDP_USERNAME=$RDP_USERNAME\nRDP_PASSWORD=$RDP_PASSWORD\nRDP_FLAGS=$(print_array_as_array $RDP_FLAGS)" > ~/.XFreeRDP-GUI-saved-connection
+}
+
+check_saved_file() {
+    [ -f ~/.XFreeRDP-GUI-saved-connection ]
+}
+
+read_saved_values() {
+    source ~/.XFreeRDP-GUI-saved-connection
+}
+
+get_rdp_command() {
+    echo "xfreerdp $1 +t:\"$2\" +v:$3 +port:$4 +u:\"$5\" +p:\"$6\""
+}
+
+main() {
+    if [ "$1" == "--saved" ] && check_saved_file; then
+        read_saved_values
+        SAVE="N/A"
+    else
+        get_user_input
+        get_feature_flags
+        ask_to_save
+
+        if [ "$SAVE" == "True" ]; then
+            if check_saved_file; then
+                zenity --question --title="Warning" --text="This action will replace previously saved values.\n\nDo you want to proceed?" --ok-label="Replace" --cancel-label="Don't Save"
+                if [ $? -eq 0 ]; then
+                    save_to_file
+                fi
+            else
+                save_to_file
+            fi
+        fi
+    fi
+
+    RDP_COMMAND=$(get_rdp_command "${RDP_FLAGS[*]}" "$RDP_WINDOW_NAME" "$RDP_IP" "$RDP_PORT" "$RDP_USERNAME" "$RDP_PASSWORD")
+
+    echo "[*] Saved: $SAVE"
+    echo "[*] Window Name: $RDP_WINDOW_NAME"
+    echo "[*] IP: $RDP_IP"
+    echo "[*] Port: $RDP_PORT"
+    echo "[*] Username: $RDP_USERNAME"
+    echo "[*] Password: $RDP_PASSWORD"
+    echo "[*] Flags: ${RDP_FLAGS[*]}"
+    echo "[*] Executing Command: $RDP_COMMAND"
+
+    eval "$RDP_COMMAND"
+}
+
+main "$1"
