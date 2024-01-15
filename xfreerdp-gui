@@ -34,7 +34,7 @@ get_feature_flags() {
         --text="Select the Features to enable:" \
         --checklist \
         --print-column=2 \
-        --column="Select" \
+        --column="-" \
         --column="Flag" \
         --column="Description" \
         --separator="/delimiter/" \
@@ -86,15 +86,68 @@ print_array_as_array() {
 }
 
 save_to_file() {
-    echo -e "RDP_WINDOW_NAME=$RDP_WINDOW_NAME\nRDP_IP=$RDP_IP\nRDP_PORT=$RDP_PORT\nRDP_USERNAME=$RDP_USERNAME\nRDP_PASSWORD=$RDP_PASSWORD\nRDP_FLAGS=$(print_array_as_array $RDP_FLAGS)" > ~/.XFreeRDP-GUI-saved-connection
+    mkdir -p ~/.XFreeRDP-GUI
+    local current_max_index=$(ls ~/.XFreeRDP-GUI | grep -E "^saved-connection-[0-9]+$" | sed 's/^saved-connection-//g' | sort -n | tail -n 1)
+    local new_index=$((current_max_index + 1))
+    echo -e "RDP_WINDOW_NAME=\"$RDP_WINDOW_NAME\"\nRDP_IP=$RDP_IP\nRDP_PORT=$RDP_PORT\nRDP_USERNAME=\"$RDP_USERNAME\"\nRDP_PASSWORD=\"$RDP_PASSWORD\"\nRDP_FLAGS=$(print_array_as_array $RDP_FLAGS)" > ~/.XFreeRDP-GUI/saved-connection-$new_index
+    FREERDP_GUI_CONNECTION_INDEX=$new_index
 }
 
 check_saved_file() {
-    [ -f ~/.XFreeRDP-GUI-saved-connection ]
+    [ -d ~/.XFreeRDP-GUI ] && [ "$(ls -A ~/.XFreeRDP-GUI)" ] && [ -f ~/.XFreeRDP-GUI/recent ]
 }
 
-read_saved_values() {
-    source ~/.XFreeRDP-GUI-saved-connection
+read_latest_saved_values() {
+    local current_max_index=$(ls ~/.XFreeRDP-GUI | grep -E "^saved-connection-[0-9]+$" | sed 's/^saved-connection-//g' | sort -n | tail -n 1)
+    source ~/.XFreeRDP-GUI/saved-connection-$current_max_index
+    FREERDP_GUI_CONNECTION_INDEX=$current_max_index
+}
+
+read_recent_connection_saved_values() {
+    source ~/.XFreeRDP-GUI/recent
+    source ~/.XFreeRDP-GUI/saved-connection-$FREERDP_GUI_CONNECTION_INDEX
+}
+
+read_saved_connection_by_index() {
+    source ~/.XFreeRDP-GUI/saved-connection-$1
+}
+
+get_saved_connecton_index() {
+    local saved_connections=()
+    for i in $(ls ~/.XFreeRDP-GUI | grep -E "^saved-connection-[0-9]+$" | sed 's/^saved-connection-//g' | sort -n); do
+        source ~/.XFreeRDP-GUI/saved-connection-$i
+        saved_connections+=(FALSE "$i" "$RDP_WINDOW_NAME" "$RDP_IP" "$RDP_PORT" "$RDP_USERNAME")
+        unset RDP_WINDOW_NAME
+        unset RDP_IP
+        unset RDP_PORT
+        unset RDP_USERNAME
+        unset RDP_PASSWORD
+        unset RDP_FLAGS
+    done
+
+    choice=$(zenity \
+        --list \
+        --radiolist \
+        --title="XFreeRDP GUI - Select Connection" \
+        --text="Select the connection to use:" \
+        --print-column=2 \
+        --column="-" \
+        --column="ID" \
+        --column="Name" \
+        --column="IP" \
+        --column="Port" \
+        --column="Username" \
+        --separator="/delimiter/" \
+        --ok-label="Continue" \
+        --cancel-label="Exit" \
+        "${saved_connections[@]}" \
+    2>/dev/null)
+
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+
+    FREERDP_GUI_CONNECTION_INDEX=$choice
 }
 
 get_rdp_command() {
@@ -102,8 +155,32 @@ get_rdp_command() {
 }
 
 main() {
-    if [ "$1" == "--saved" ] && check_saved_file; then
-        read_saved_values
+    if [ "$1" == "--help" ]; then
+        echo "XFreeRDP GUI"
+        echo "Launches XFreeRDP connection configuration GUI."
+        echo "Provided by: NightmareGaurav [https://www.github.com/NightmareGaurav]"
+        echo ""
+        echo "Usage: xfreerdp-gui [OPTION]"
+        echo ""
+        echo "Options (optional):"
+        echo "  <NONE>                      Launch the GUI."
+        echo "  --help                      Display this help message."
+        echo "  --latest                    Seamlessly Use the most recently saved connection."
+        echo "  --recent                    Seamlessly Use the most recently used connection."
+        echo "  --saved                     Open a list of saved connections to choose from."
+        echo ""
+        echo "Example:"
+        echo "  xfreerdp-gui --saved-recent-connection"
+        exit 0
+    elif [ "$1" == "--latest" ] && check_saved_file; then
+        read_latest_saved_values
+        SAVE="N/A"
+    elif [ "$1" == "--recent" ] && check_saved_file; then
+        read_recent_connection_saved_values
+        SAVE="N/A"
+    elif [ "$1" == "--saved" ] && check_saved_file; then
+        get_saved_connecton_index
+        read_saved_connection_by_index "$FREERDP_GUI_CONNECTION_INDEX"
         SAVE="N/A"
     else
         get_user_input
@@ -132,6 +209,8 @@ main() {
     echo "[*] Password: $RDP_PASSWORD"
     echo "[*] Flags: ${RDP_FLAGS[*]}"
     echo "[*] Executing Command: $RDP_COMMAND"
+
+    echo -e "FREERDP_GUI_CONNECTION_INDEX=$FREERDP_GUI_CONNECTION_INDEX" > ~/.XFreeRDP-GUI/recent
 
     eval "$RDP_COMMAND"
 }

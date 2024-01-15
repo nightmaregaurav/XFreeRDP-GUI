@@ -9,7 +9,7 @@
 ### Step 3: Clone this repository `https://github.com/nightmaregaurav/XFreeRDP-GUI`
 ### Step 4: Run `chmod +x install.sh`
 ### Step 5: Run `sudo ./install.sh`
-### Step 6: Run `xfreerdp-gui` from your terminal or run it from your application menu
+### Step 6: Run `xfreerdp-gui` from your terminal or run it from your application menu (Note: while using application menu, you may need to right-click to access different options)
 
 ## Uninstall
 ### Step 1: Clone this repository `https://github.com/nightmaregaurav/XFreeRDP-GUI`
@@ -19,9 +19,14 @@
 ## Usage
 ### Plain: `xfreerdp-gui`
 - Opens the GUI and ask for the required information
-### Seamless/Saved: `xfreerdp-gui --saved`
-- Run with previously saved information
-
+### Help: `xfreerdp-gui --help`
+- Displays the help message
+### Saved: `xfreerdp-gui --saved`
+- Opens the GUI to choose from previously saved connections
+### Seamless/Recently Saved: `xfreerdp-gui --latest`
+- Run with most recently saved connection
+### Seamless/Recently Used: `xfreerdp-gui --recent`
+- Run with most recently used connection
 ---
 
 ## Disclaimer

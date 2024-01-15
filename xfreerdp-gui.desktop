@@ -9,9 +9,17 @@ Icon=computer-symbolic
 Terminal=false
 X-MultipleArgs=false
 Categories=Utility;
-Actions=saved;
+Actions=saved;latest;recent;
 X-KDE-SubstituteUID=false
 
 [Desktop Action saved]
 Exec=xfreerdp-gui --saved
-Name=Run with saved configuration
+Name=Choose from saved
+
+[Desktop Action latest]
+Exec=xfreerdp-gui --latest
+Name=Run recently saved
+
+[Desktop Action recent]
+Exec=xfreerdp-gui --recent
+Name=Run recently used

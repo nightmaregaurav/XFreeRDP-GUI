@@ -13,4 +13,8 @@ echo "Removing xfreerdp-gui.desktop from /usr/share/applications directory..."
 rm -f /usr/share/applications/xfreerdp-gui.desktop
 echo "Done."
 
+echo "Removing local configuration files..."
+rm -rf ~/.XFreeRDP-GUI
+echo "Done."
+
 echo "Uninstallation completed successfully."
