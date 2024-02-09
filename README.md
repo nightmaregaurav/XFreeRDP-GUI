@@ -2,6 +2,10 @@
 #### Provides a simple GUI for XFreeRDP in Linux
 
 ---
+![Initial Screen](./Screenshot%20from%202024-02-09%2020-47-34.png)
+![Feature Selection](./Screenshot%20from%202024-02-09%2020-47-44.png)
+![Save Information](./Screenshot%20from%202024-02-09%2020-47-51.png)
+![Use Existing connection](./Screenshot%20from%202024-02-09%2020-48-08.png)
 
 ## Installation
 ### Step 1: Install `XFreeRDP` from your package manager
