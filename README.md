@@ -11,14 +11,16 @@
 ### Step 1: Install `XFreeRDP` from your package manager
 ### Step 2: Make sure `Zenity` and `awk` are available in your system
 ### Step 3: Clone this repository `https://github.com/nightmaregaurav/XFreeRDP-GUI`
-### Step 4: Run `chmod +x install.sh`
-### Step 5: Run `sudo ./install.sh`
-### Step 6: Run `xfreerdp-gui` from your terminal or run it from your application menu (Note: while using application menu, you may need to right-click to access different options)
+### Step 4: `cd XFreeRDP-GUI`
+### Step 5: Run `chmod +x install.sh`
+### Step 6: Run `sudo ./install.sh`
+### Step 7: Run `xfreerdp-gui` from your terminal or run it from your application menu (Note: while using application menu, you may need to right-click to access different options)
 
 ## Uninstall
 ### Step 1: Clone this repository `https://github.com/nightmaregaurav/XFreeRDP-GUI`
-### Step 2: Run `chmod +x uninstall.sh`
-### Step 3: Run `sudo ./uninstall.sh`
+### Step 2: `cd XFreeRDP-GUI`
+### Step 3: Run `chmod +x uninstall.sh`
+### Step 4: Run `sudo ./uninstall.sh`
 
 ## Usage
 ### Plain: `xfreerdp-gui`
