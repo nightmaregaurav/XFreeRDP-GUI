@@ -1,18 +1,23 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run this script as root."
+set -euo pipefail
+
+if ((EUID != 0)); then
+    printf 'Please run this script as root (for example, with sudo).\n' >&2
     exit 1
 fi
 
-echo "Copying xfreerdp-gui to /bin directory..."
-cp ./xfreerdp-gui /bin/xfreerdp-gui
-chmod 755 /bin/xfreerdp-gui
-echo "Done."
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+BIN_DIR=/usr/local/bin
+APPLICATIONS_DIR=/usr/local/share/applications
 
-echo "Copying xfreerdp-gui.desktop to /usr/share/applications directory..."
-cp ./xfreerdp-gui.desktop /usr/share/applications/xfreerdp-gui.desktop
-chmod 755 /usr/share/applications/xfreerdp-gui.desktop
-echo "Done."
+if [[ ! -f "$SCRIPT_DIR/xfreerdp-gui" || ! -f "$SCRIPT_DIR/xfreerdp-gui.desktop" ]]; then
+    printf 'The launcher or desktop entry is missing from %s.\n' "$SCRIPT_DIR" >&2
+    exit 1
+fi
 
-echo "Installation completed successfully."
+install -d -m 755 "$BIN_DIR" "$APPLICATIONS_DIR"
+install -m 755 "$SCRIPT_DIR/xfreerdp-gui" "$BIN_DIR/xfreerdp-gui"
+install -m 644 "$SCRIPT_DIR/xfreerdp-gui.desktop" "$APPLICATIONS_DIR/xfreerdp-gui.desktop"
+
+printf 'XFreeRDP GUI installed to %s.\n' "$BIN_DIR"
