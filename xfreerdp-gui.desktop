@@ -5,21 +5,21 @@ Name=XFreeRDP GUI
 GenericName=XFreeRDP GUI
 Comment=GUI for XFreeRDP
 Exec=xfreerdp-gui
+TryExec=xfreerdp-gui
 Icon=computer-symbolic
 Terminal=false
-X-MultipleArgs=false
-Categories=Utility;
+StartupNotify=true
+Categories=Network;RemoteAccess;
 Actions=saved;latest;recent;
-X-KDE-SubstituteUID=false
 
 [Desktop Action saved]
 Exec=xfreerdp-gui --saved
-Name=Choose from saved
+Name=Choose a saved connection
 
 [Desktop Action latest]
 Exec=xfreerdp-gui --latest
-Name=Run recently saved
+Name=Run most recently saved
 
 [Desktop Action recent]
 Exec=xfreerdp-gui --recent
-Name=Run recently used
+Name=Run most recently used
