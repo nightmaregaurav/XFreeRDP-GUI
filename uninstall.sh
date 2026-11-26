@@ -1,20 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run this script as root."
+set -euo pipefail
+
+if ((EUID != 0)); then
+    printf 'Please run this script as root (for example, with sudo).\n' >&2
     exit 1
 fi
 
-echo "Removing xfreerdp-gui from /bin directory..."
-rm -f /bin/xfreerdp-gui
-echo "Done."
-
-echo "Removing xfreerdp-gui.desktop from /usr/share/applications directory..."
-rm -f /usr/share/applications/xfreerdp-gui.desktop
-echo "Done."
-
-echo "Removing local configuration files..."
-rm -rf ~/.XFreeRDP-GUI
-echo "Done."
-
-echo "Uninstallation completed successfully."
+rm -f \
+    /usr/local/bin/xfreerdp-gui \
+    /usr/local/share/applications/xfreerdp-gui.desktop \
+    /bin/xfreerdp-gui \
+    /usr/share/applications/xfreerdp-gui.desktop
+printf 'XFreeRDP GUI has been uninstalled. Saved profiles were left untouched.\n'
