@@ -1,218 +1,443 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -o pipefail
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME:?}/.config}/xfreerdp-gui"
+FORM_SEPARATOR=$'\x1f'
+RDP_FLAGS=()
+FREERDP_ARGS=()
+FREERDP_BIN=''
+
+show_error() {
+    if command -v zenity >/dev/null 2>&1; then
+        zenity --error --title="XFreeRDP GUI" --text="$1" 2>/dev/null || true
+    else
+        printf '%s\n' "$1" >&2
+    fi
+}
+
+check_dependencies() {
+    if ! command -v zenity >/dev/null 2>&1; then
+        printf 'Missing dependency: zenity\n' >&2
+        return 1
+    fi
+
+    if command -v xfreerdp >/dev/null 2>&1; then
+        FREERDP_BIN=$(command -v xfreerdp)
+    elif command -v xfreerdp3 >/dev/null 2>&1; then
+        FREERDP_BIN=$(command -v xfreerdp3)
+    else
+        printf 'Missing dependency: xfreerdp (or xfreerdp3)\n' >&2
+        return 1
+    fi
+
+    if ! command -v base64 >/dev/null 2>&1; then
+        printf 'Missing dependency: base64\n' >&2
+        return 1
+    fi
+}
+
+extract_form_field() {
+    local remaining=$1
+
+    if [[ "$remaining" == *"$FORM_SEPARATOR"* ]]; then
+        FORM_FIELD=${remaining%%"$FORM_SEPARATOR"*}
+        FORM_REMAINDER=${remaining#*"$FORM_SEPARATOR"}
+    else
+        FORM_FIELD=$remaining
+        FORM_REMAINDER=''
+    fi
+}
 
 get_user_input() {
-    user_input=$(zenity \
+    local user_input
+
+    if ! user_input=$(zenity \
         --forms \
         --title="XFreeRDP GUI" \
         --text="Enter the following values:" \
         --add-entry="Window Name:" \
-        --add-entry="IP address:" \
+        --add-entry="IP address or host name:" \
         --add-entry="Port:" \
         --add-entry="Username:" \
         --add-password="Password:" \
-        --separator="/delimiter/" \
-        --forms-date-format="%Y-%m-%d %H:%M:%S" \
+        --separator="$FORM_SEPARATOR" \
         --ok-label="Continue" \
         --cancel-label="Exit" \
-    2>/dev/null)
-
-    if [ $? -ne 0 ]; then
-        exit 1
+        2>/dev/null); then
+        return 1
     fi
 
-    RDP_WINDOW_NAME=$(echo "$user_input" | awk -F "/delimiter/" '{print $1}')
-    RDP_IP=$(echo "$user_input" | awk -F "/delimiter/" '{print $2}')
-    RDP_PORT=$(echo "$user_input" | awk -F "/delimiter/" '{print $3}')
-    RDP_USERNAME=$(echo "$user_input" | awk -F "/delimiter/" '{print $4}')
-    RDP_PASSWORD=$(echo "$user_input" | awk -F "/delimiter/" '{print $5}')
+    extract_form_field "$user_input"
+    RDP_WINDOW_NAME=$FORM_FIELD
+    extract_form_field "$FORM_REMAINDER"
+    RDP_IP=$FORM_FIELD
+    extract_form_field "$FORM_REMAINDER"
+    RDP_PORT=$FORM_FIELD
+    extract_form_field "$FORM_REMAINDER"
+    RDP_USERNAME=$FORM_FIELD
+    extract_form_field "$FORM_REMAINDER"
+    RDP_PASSWORD=$FORM_FIELD
 }
 
 get_feature_flags() {
-    user_flags_input=$(zenity \
+    local user_flags_input flag
+
+    if ! user_flags_input=$(zenity \
         --list \
         --title="XFreeRDP GUI - Select Features" \
         --text="Select the Features to enable:" \
         --checklist \
         --print-column=2 \
-        --column="-" \
+        --column="Enabled" \
         --column="Flag" \
         --column="Description" \
-        --separator="/delimiter/" \
+        --separator="$FORM_SEPARATOR" \
         --ok-label="Continue" \
         --cancel-label="Exit" \
-        TRUE " +dynamic-resolution" "Update resolution on Resize" \
-        TRUE " +window-drag" "Enable full window drag" \
-        TRUE " +home-drive" "Enable Redirect user home as share" \
-        TRUE " +auto-reconnect" "Enable Automatic reconnection" \
-        TRUE " +clipboard" "Enable Clipboard redirection" \
-        TRUE " +offscreen-cache" "Enable Offscreen Bitmap Cache" \
-        TRUE " +multitouch" "Enable Redirect multitouch input" \
-        TRUE " -heartbeat" "Disable Support heartbeat PDUs" \
-        TRUE " +gestures" "Enable Consumption of multitouch input" \
-        TRUE " +aero" "Enable Desktop composition" \
-        TRUE " +bitmap-cache" "Enable Bitmap caching" \
-        TRUE " +disp" "Enable Display control" \
-        TRUE " +sound" "Listen remote desktop sound locally" \
-        TRUE " +microphone" "Allow remote desktop to use local microphone" \
-        TRUE " +video" "Redirect Multimedia Video" \
-    2>/dev/null)
-
-    if [ $? -ne 0 ]; then
-        exit 1
+        TRUE "+dynamic-resolution" "Update resolution on resize" \
+        TRUE "+window-drag" "Enable full window drag" \
+        FALSE "+home-drive" "Redirect the user home directory as a share (off by default)" \
+        TRUE "+auto-reconnect" "Enable automatic reconnection" \
+        FALSE "+clipboard" "Enable clipboard redirection (off by default)" \
+        TRUE "+offscreen-cache" "Enable offscreen bitmap cache" \
+        TRUE "+multitouch" "Redirect multitouch input" \
+        TRUE "-heartbeat" "Disable heartbeat PDUs" \
+        TRUE "+gestures" "Consume multitouch input locally" \
+        TRUE "+aero" "Enable desktop composition" \
+        TRUE "+bitmap-cache" "Enable bitmap caching" \
+        TRUE "+disp" "Enable display control" \
+        TRUE "+sound" "Listen to remote desktop sound locally" \
+        FALSE "+microphone" "Allow microphone redirection (off by default)" \
+        TRUE "+video" "Redirect multimedia video" \
+        2>/dev/null); then
+        return 1
     fi
 
-    RDP_FLAGS=$(echo "$user_flags_input" | awk -F "/delimiter/" '{ for(i=1; i<=NF; i++) { sub(/^[ \t]+/, "", $i); sub(/[ \t]+$/, "", $i); print $i } }')
-    RDP_FLAGS=$(echo "$RDP_FLAGS" | tr '\n' ' ')
-    RDP_FLAGS=$(echo "$RDP_FLAGS" | sed 's/ *$//g')
+    RDP_FLAGS=()
+    while [[ "$user_flags_input" == *"$FORM_SEPARATOR"* ]]; do
+        flag=${user_flags_input%%"$FORM_SEPARATOR"*}
+        [[ -n "$flag" ]] && RDP_FLAGS+=("$flag")
+        user_flags_input=${user_flags_input#*"$FORM_SEPARATOR"}
+    done
+    [[ -n "$user_flags_input" ]] && RDP_FLAGS+=("$user_flags_input")
+    return 0
 }
 
 ask_to_save() {
-    zenity --question --title="Save Values?" --text="Do you want to save these values?" --ok-label="Save" --cancel-label="Don't Save"
-    if [ $? -eq 0 ]; then
-        SAVE="True"
+    if zenity --question --title="Save Connection?" \
+        --text="Save this connection profile? Passwords are never saved." \
+        --ok-label="Save" --cancel-label="Don't Save"; then
+        SAVE='True'
     else
-        SAVE="False"
+        SAVE='False'
     fi
 }
 
-print_array_as_array() {
-    local array=("$@")
-    value="(\n"
-    for i in "${array[@]}"; do
-        value="$value\"$i\"\n"
-    done
-    value="$value)"
-    echo "$value"
+ensure_config_dir() {
+    mkdir -p "$CONFIG_DIR" || return 1
+    chmod 700 "$CONFIG_DIR"
+}
+
+encode_value() {
+    printf '%s' "$1" | base64 | tr -d '\r\n'
+}
+
+decode_value() {
+    local encoded=$1 decoded
+
+    if decoded=$(printf '%s' "$encoded" | base64 --decode 2>/dev/null); then
+        printf '%s' "$decoded"
+    elif decoded=$(printf '%s' "$encoded" | base64 -D 2>/dev/null); then
+        printf '%s' "$decoded"
+    else
+        return 1
+    fi
 }
 
 save_to_file() {
-    mkdir -p ~/.XFreeRDP-GUI
-    local current_max_index=$(ls ~/.XFreeRDP-GUI | grep -E "^saved-connection-[0-9]+$" | sed 's/^saved-connection-//g' | sort -n | tail -n 1)
-    local new_index=$((current_max_index + 1))
-    echo -e "RDP_WINDOW_NAME=\"$RDP_WINDOW_NAME\"\nRDP_IP=$RDP_IP\nRDP_PORT=$RDP_PORT\nRDP_USERNAME=\"$RDP_USERNAME\"\nRDP_PASSWORD=\"$RDP_PASSWORD\"\nRDP_FLAGS=$(print_array_as_array $RDP_FLAGS)" > ~/.XFreeRDP-GUI/saved-connection-$new_index
+    local path index max_index=0 new_index temporary_file flag
+
+    ensure_config_dir || return 1
+    for path in "$CONFIG_DIR"/saved-connection-*; do
+        [[ -f "$path" ]] || continue
+        index=${path##*saved-connection-}
+        [[ "$index" =~ ^[0-9]{1,9}$ ]] || continue
+        index=$((10#$index))
+        (( index > max_index )) && max_index=$index
+    done
+
+    new_index=$((max_index + 1))
+    temporary_file="$CONFIG_DIR/.saved-connection-$new_index.$$"
+    if ! (umask 077; {
+        printf 'XFreeRDP-GUI-CONNECTION-1\n'
+        encode_value "$RDP_WINDOW_NAME"; printf '\n'
+        encode_value "$RDP_IP"; printf '\n'
+        encode_value "$RDP_PORT"; printf '\n'
+        encode_value "$RDP_USERNAME"; printf '\n'
+        printf '%s\n' "${#RDP_FLAGS[@]}"
+        for flag in "${RDP_FLAGS[@]}"; do
+            encode_value "$flag"; printf '\n'
+        done
+    } > "$temporary_file"); then
+        rm -f "$temporary_file"
+        return 1
+    fi
+    chmod 600 "$temporary_file" && mv "$temporary_file" "$CONFIG_DIR/saved-connection-$new_index" || {
+        rm -f "$temporary_file"
+        return 1
+    }
+
     FREERDP_GUI_CONNECTION_INDEX=$new_index
 }
 
-check_saved_file() {
-    [ -d ~/.XFreeRDP-GUI ] && [ "$(ls -A ~/.XFreeRDP-GUI)" ] && [ -f ~/.XFreeRDP-GUI/recent ]
+load_saved_connection() {
+    local connection_index=$1 path line='' flag_count index
+    local saved_values=()
+
+    [[ "$connection_index" =~ ^[0-9]{1,9}$ ]] || return 1
+    index=$((10#$connection_index))
+    path="$CONFIG_DIR/saved-connection-$index"
+    [[ -f "$path" && -r "$path" ]] || return 1
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        saved_values+=("$line")
+        ((${#saved_values[@]} <= 71)) || return 1
+    done < "$path"
+
+    ((${#saved_values[@]} >= 6)) || return 1
+    [[ "${saved_values[0]}" == 'XFreeRDP-GUI-CONNECTION-1' ]] || return 1
+    flag_count=${saved_values[5]}
+    [[ "$flag_count" =~ ^[0-9]{1,2}$ ]] || return 1
+    flag_count=$((10#$flag_count))
+    ((flag_count <= 64 && ${#saved_values[@]} == flag_count + 6)) || return 1
+
+    RDP_WINDOW_NAME=$(decode_value "${saved_values[1]}") || return 1
+    RDP_IP=$(decode_value "${saved_values[2]}") || return 1
+    RDP_PORT=$(decode_value "${saved_values[3]}") || return 1
+    RDP_USERNAME=$(decode_value "${saved_values[4]}") || return 1
+    RDP_PASSWORD=''
+    RDP_FLAGS=()
+    for ((index = 0; index < flag_count; index++)); do
+        flag=$(decode_value "${saved_values[index + 6]}") || return 1
+        RDP_FLAGS+=("$flag")
+    done
+    FREERDP_GUI_CONNECTION_INDEX=$connection_index
 }
 
-read_latest_saved_values() {
-    local current_max_index=$(ls ~/.XFreeRDP-GUI | grep -E "^saved-connection-[0-9]+$" | sed 's/^saved-connection-//g' | sort -n | tail -n 1)
-    source ~/.XFreeRDP-GUI/saved-connection-$current_max_index
-    FREERDP_GUI_CONNECTION_INDEX=$current_max_index
-}
+get_latest_saved_connection_index() {
+    local path index max_index=0
 
-read_recent_connection_saved_values() {
-    source ~/.XFreeRDP-GUI/recent
-    source ~/.XFreeRDP-GUI/saved-connection-$FREERDP_GUI_CONNECTION_INDEX
-}
-
-read_saved_connection_by_index() {
-    source ~/.XFreeRDP-GUI/saved-connection-$1
-}
-
-get_saved_connecton_index() {
-    local saved_connections=()
-    for i in $(ls ~/.XFreeRDP-GUI | grep -E "^saved-connection-[0-9]+$" | sed 's/^saved-connection-//g' | sort -n); do
-        source ~/.XFreeRDP-GUI/saved-connection-$i
-        saved_connections+=(FALSE "$i" "$RDP_WINDOW_NAME" "$RDP_IP" "$RDP_PORT" "$RDP_USERNAME")
-        unset RDP_WINDOW_NAME
-        unset RDP_IP
-        unset RDP_PORT
-        unset RDP_USERNAME
-        unset RDP_PASSWORD
-        unset RDP_FLAGS
+    for path in "$CONFIG_DIR"/saved-connection-*; do
+        [[ -f "$path" ]] || continue
+        index=${path##*saved-connection-}
+        [[ "$index" =~ ^[0-9]{1,9}$ ]] || continue
+        index=$((10#$index))
+        if load_saved_connection "$index" && (( index > max_index )); then
+            max_index=$index
+        fi
     done
 
-    choice=$(zenity \
+    ((max_index > 0)) || return 1
+    FREERDP_GUI_CONNECTION_INDEX=$max_index
+    load_saved_connection "$max_index"
+}
+
+read_recent_connection() {
+    local recent_index
+
+    [[ -r "$CONFIG_DIR/recent" ]] || return 1
+    IFS= read -r recent_index < "$CONFIG_DIR/recent" || return 1
+    load_saved_connection "$recent_index"
+}
+
+write_recent_connection() {
+    local temporary_file
+
+    [[ -n "${FREERDP_GUI_CONNECTION_INDEX:-}" ]] || return 0
+    ensure_config_dir || return 1
+    temporary_file="$CONFIG_DIR/.recent.$$"
+    if ! (umask 077; printf '%s\n' "$FREERDP_GUI_CONNECTION_INDEX" > "$temporary_file"); then
+        rm -f "$temporary_file"
+        return 1
+    fi
+    chmod 600 "$temporary_file" && mv "$temporary_file" "$CONFIG_DIR/recent" || {
+        rm -f "$temporary_file"
+        return 1
+    }
+}
+
+get_saved_connection_index() {
+    local path index choice
+    local saved_connections=()
+
+    for path in "$CONFIG_DIR"/saved-connection-*; do
+        [[ -f "$path" ]] || continue
+        index=${path##*saved-connection-}
+        [[ "$index" =~ ^[0-9]{1,9}$ ]] || continue
+        if load_saved_connection "$index"; then
+            saved_connections+=(FALSE "$index" "$RDP_WINDOW_NAME" "$RDP_IP" "$RDP_PORT" "$RDP_USERNAME")
+        fi
+    done
+
+    if ((${#saved_connections[@]} == 0)); then
+        show_error "No compatible saved connections were found. Create a new profile to continue."
+        return 1
+    fi
+
+    if ! choice=$(zenity \
         --list \
         --radiolist \
         --title="XFreeRDP GUI - Select Connection" \
         --text="Select the connection to use:" \
         --print-column=2 \
-        --column="-" \
+        --column="Select" \
         --column="ID" \
         --column="Name" \
-        --column="IP" \
+        --column="Host" \
         --column="Port" \
         --column="Username" \
-        --separator="/delimiter/" \
+        --separator="$FORM_SEPARATOR" \
         --ok-label="Continue" \
         --cancel-label="Exit" \
         "${saved_connections[@]}" \
-    2>/dev/null)
-
-    if [ $? -ne 0 ]; then
-        exit 1
+        2>/dev/null); then
+        return 1
     fi
 
+    [[ "$choice" =~ ^[0-9]{1,9}$ ]] || return 1
     FREERDP_GUI_CONNECTION_INDEX=$choice
 }
 
-get_rdp_command() {
-    echo "xfreerdp $1 +t:\"$2\" +v:$3 +port:$4 +u:\"$5\" +p:\"$6\""
+validate_connection() {
+    local port
+
+    if [[ -z "$RDP_IP" || -z "$RDP_USERNAME" ]]; then
+        show_error "A host name or IP address and a username are required."
+        return 1
+    fi
+    [[ -n "$RDP_WINDOW_NAME" ]] || RDP_WINDOW_NAME=$RDP_IP
+    if [[ ! "$RDP_PORT" =~ ^[0-9]{1,5}$ ]]; then
+        show_error "Port must be a number between 1 and 65535."
+        return 1
+    fi
+
+    port=$((10#$RDP_PORT))
+    if ((port < 1 || port > 65535)); then
+        show_error "Port must be a number between 1 and 65535."
+        return 1
+    fi
+    RDP_PORT=$port
+}
+
+build_freerdp_args() {
+    FREERDP_ARGS=("${RDP_FLAGS[@]}" "/t:$RDP_WINDOW_NAME" "/port:$RDP_PORT" "/from-stdin")
+}
+
+prompt_for_password() {
+    if ! RDP_PASSWORD=$(zenity --password --title="XFreeRDP GUI - Password" 2>/dev/null); then
+        return 1
+    fi
+}
+
+run_freerdp() {
+    local connection_status
+
+    build_freerdp_args
+    write_recent_connection || return 1
+    printf '%s\n%s\n%s\n%s\n' "$RDP_USERNAME" "$RDP_PASSWORD" '' "$RDP_IP" | \
+        "$FREERDP_BIN" "${FREERDP_ARGS[@]}"
+    connection_status=$?
+    RDP_PASSWORD=''
+    return "$connection_status"
+}
+
+usage() {
+    cat <<'USAGE'
+XFreeRDP GUI - a Zenity front end for FreeRDP
+
+Usage: xfreerdp-gui [OPTION]
+
+Options:
+  --help     Display this help message.
+  --latest   Connect using the most recently saved profile.
+  --recent   Connect using the most recently used profile.
+  --saved    Choose a saved profile.
+  (no option) Create a connection interactively.
+USAGE
 }
 
 main() {
-    if [ "$1" == "--help" ]; then
-        echo "XFreeRDP GUI"
-        echo "Launches XFreeRDP connection configuration GUI."
-        echo "Provided by: NightmareGaurav [https://www.github.com/NightmareGaurav]"
-        echo ""
-        echo "Usage: xfreerdp-gui [OPTION]"
-        echo ""
-        echo "Options (optional):"
-        echo "  <NONE>                      Launch the GUI."
-        echo "  --help                      Display this help message."
-        echo "  --latest                    Seamlessly Use the most recently saved connection."
-        echo "  --recent                    Seamlessly Use the most recently used connection."
-        echo "  --saved                     Open a list of saved connections to choose from."
-        echo ""
-        echo "Example:"
-        echo "  xfreerdp-gui --saved-recent-connection"
-        exit 0
-    elif [ "$1" == "--latest" ] && check_saved_file; then
-        read_latest_saved_values
-        SAVE="N/A"
-    elif [ "$1" == "--recent" ] && check_saved_file; then
-        read_recent_connection_saved_values
-        SAVE="N/A"
-    elif [ "$1" == "--saved" ] && check_saved_file; then
-        get_saved_connecton_index
-        read_saved_connection_by_index "$FREERDP_GUI_CONNECTION_INDEX"
-        SAVE="N/A"
-    else
-        get_user_input
-        get_feature_flags
-        ask_to_save
+    local mode=${1:-}
 
-        if [ "$SAVE" == "True" ]; then
-            if check_saved_file; then
-                zenity --question --title="Warning" --text="This action will replace previously saved values.\n\nDo you want to proceed?" --ok-label="Replace" --cancel-label="Don't Save"
-                if [ $? -eq 0 ]; then
-                    save_to_file
-                fi
-            else
-                save_to_file
+    if (($# > 1)); then
+        usage >&2
+        return 2
+    fi
+
+    case "$mode" in
+        --help)
+            usage
+            return 0
+            ;;
+        --latest|--recent|--saved|'')
+            ;;
+        *)
+            usage >&2
+            return 2
+            ;;
+    esac
+
+    if [[ "$mode" == '--help' ]]; then
+        return 0
+    fi
+    check_dependencies || return 1
+
+    case "$mode" in
+        --latest)
+            if ! get_latest_saved_connection_index; then
+                show_error "No compatible saved connections were found. Create a new profile to continue."
+                return 1
+            fi
+            ;;
+        --recent)
+            if ! read_recent_connection; then
+                show_error "No recent saved connection is available."
+                return 1
+            fi
+            ;;
+        --saved)
+            get_saved_connection_index || return 0
+            load_saved_connection "$FREERDP_GUI_CONNECTION_INDEX" || {
+                show_error "The selected saved connection could not be read."
+                return 1
+            }
+            ;;
+        '')
+            get_user_input || return 0
+            get_feature_flags || return 0
+            ;;
+    esac
+
+    validate_connection || return 1
+
+    if [[ "$mode" == '' ]]; then
+        ask_to_save
+        if [[ "$SAVE" == 'True' ]]; then
+            if ! save_to_file; then
+                show_error "Could not save the connection profile."
+                return 1
             fi
         fi
     fi
 
-    RDP_COMMAND=$(get_rdp_command "${RDP_FLAGS[*]}" "$RDP_WINDOW_NAME" "$RDP_IP" "$RDP_PORT" "$RDP_USERNAME" "$RDP_PASSWORD")
+    if [[ -z "$RDP_PASSWORD" ]]; then
+        prompt_for_password || return 0
+    fi
 
-    echo "[*] Saved: $SAVE"
-    echo "[*] Window Name: $RDP_WINDOW_NAME"
-    echo "[*] IP: $RDP_IP"
-    echo "[*] Port: $RDP_PORT"
-    echo "[*] Username: $RDP_USERNAME"
-    echo "[*] Password: $RDP_PASSWORD"
-    echo "[*] Flags: ${RDP_FLAGS[*]}"
-    echo "[*] Executing Command: $RDP_COMMAND"
-
-    echo -e "FREERDP_GUI_CONNECTION_INDEX=$FREERDP_GUI_CONNECTION_INDEX" > ~/.XFreeRDP-GUI/recent
-
-    eval "$RDP_COMMAND"
+    run_freerdp
 }
 
-main "$1"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

@@ -1,77 +1,55 @@
 # XFreeRDP-GUI
-#### Provides a simple GUI for XFreeRDP in Linux
 
----
-![Initial Screen](./Screenshot%20from%202024-02-09%2020-47-34.png)
-![Feature Selection](./Screenshot%20from%202024-02-09%2020-47-44.png)
-![Save Information](./Screenshot%20from%202024-02-09%2020-47-51.png)
-![Use Existing connection](./Screenshot%20from%202024-02-09%2020-48-08.png)
+A small Linux desktop front end for FreeRDP. It uses Bash and Zenity to collect connection details and launch `xfreerdp` (or `xfreerdp3`). It is not affiliated with or a replacement for the [FreeRDP project](https://www.freerdp.com/).
 
-## Installation
-### Step 1: Install `XFreeRDP` from your package manager
-### Step 2: Make sure `Zenity` and `awk` are available in your system
-### Step 3: Clone this repository `https://github.com/nightmaregaurav/XFreeRDP-GUI`
-### Step 4: `cd XFreeRDP-GUI`
-### Step 5: Run `chmod +x install.sh`
-### Step 6: Run `sudo ./install.sh`
-### Step 7: Run `xfreerdp-gui` from your terminal or run it from your application menu (Note: while using application menu, you may need to right-click to access different options)
+![Connection form](./Screenshot%20from%202024-02-09%2020-47-34.png)
+![Feature selection](./Screenshot%20from%202024-02-09%2020-47-44.png)
+![Save connection](./Screenshot%20from%202024-02-09%2020-47-51.png)
+![Choose a saved connection](./Screenshot%20from%202024-02-09%2020-48-08.png)
 
-## Uninstall
-### Step 1: Clone this repository `https://github.com/nightmaregaurav/XFreeRDP-GUI`
-### Step 2: `cd XFreeRDP-GUI`
-### Step 3: Run `chmod +x uninstall.sh`
-### Step 4: Run `sudo ./uninstall.sh`
+## Requirements
+
+- Linux with Bash
+- Zenity
+- FreeRDP with `xfreerdp` or `xfreerdp3`
+- `base64`
+
+## Install
+
+Install FreeRDP and Zenity using your distribution's package manager, then run:
+
+```sh
+git clone https://github.com/nightmaregaurav/XFreeRDP-GUI.git
+cd XFreeRDP-GUI
+sudo bash ./install.sh
+```
+
+The installer places the launcher in `/usr/local/bin` and the desktop entry in `/usr/local/share/applications`. Start `xfreerdp-gui` from a terminal or your application menu.
 
 ## Usage
-### Plain: `xfreerdp-gui`
-- Opens the GUI and ask for the required information
-### Help: `xfreerdp-gui --help`
-- Displays the help message
-### Saved: `xfreerdp-gui --saved`
-- Opens the GUI to choose from previously saved connections
-### Seamless/Recently Saved: `xfreerdp-gui --latest`
-- Run with most recently saved connection
-### Seamless/Recently Used: `xfreerdp-gui --recent`
-- Run with most recently used connection
----
 
-## Disclaimer
-This tool is in no way affiliated with `FreeRDP` or `XFreeRDP`. It is just a simple GUI for `XFreeRDP`, not a replacement for it. If you want to know more about `FreeRDP` or `XFreeRDP`, you can visit their website [here](https://www.freerdp.com/).
+```text
+xfreerdp-gui          Create a connection interactively
+xfreerdp-gui --saved  Choose a saved profile
+xfreerdp-gui --latest Use the most recently saved profile
+xfreerdp-gui --recent Use the most recently used profile
+xfreerdp-gui --help   Show help
+```
 
----
+Saved profiles contain the connection name, host, port, username, and selected options. Passwords are never saved; the password prompt appears when connecting to a saved profile. Credentials are sent to FreeRDP over standard input instead of being included in the process arguments or printed by this launcher. Profiles are stored with user-only permissions under `$XDG_CONFIG_HOME/xfreerdp-gui`, or `~/.config/xfreerdp-gui` when `XDG_CONFIG_HOME` is unset. Home-directory, clipboard, and microphone redirection are off by default and can be enabled in the feature list when needed.
 
-## How to Contribute
-* Fork the repository
-* Clone the forked repository
-* Make changes
-* Commit and push the changes
-* Create a pull request
-* Wait for the pull request to be merged
-* Celebrate
-* Repeat
+Profiles created by older releases are not imported, because those files contain executable shell syntax. Recreate those profiles with the current version. Some FreeRDP versions cannot handle an interactive certificate-confirmation prompt while standard input is being used for credentials; use FreeRDP's supported certificate trust workflow before connecting, and do not disable certificate checks as a workaround.
 
-*If you are new to open source, you can read [this](https://opensource.guide/how-to-contribute/) to learn how to contribute to open source projects.*<br>
-*If you are new to GitHub, you can read [this](https://guides.github.com/activities/hello-world/) to learn how to use GitHub.*<br>
-*If you are new to Git, you can read [this](https://www.atlassian.com/git/tutorials/learn-git-with-bitbucket-cloud) to learn how to use Git.*<br>
-*If you are new to Bash, you can read [this](https://www.tutorialspoint.com/unix/shell_scripting.htm) to learn how to use Bash.*
+## Uninstall
 
----
+From the project directory, run `sudo bash ./uninstall.sh`. The launcher and desktop entry are removed; saved profiles are intentionally left in your user configuration directory.
 
-## Note: This Project is Licensed under GNU GPLv3.
+## Development checks
 
-### Which means Anyone are permitted for:
-- Commercial use: **The licensed material and derivatives may be used for commercial purposes.**
-- Distribution: **The licensed material may be distributed.**
-- Modification: **The licensed material may be modified.**
-- Patent use: **This license provides an express grant of patent rights from contributors.**
-- Private use **The licensed material may be used and modified in private.**
+Run the local shell tests with:
 
-### Under Condition that:
-- Disclose source: **Source code must be made available when the licensed material is distributed.**
-- License and copyright notice: **A copy of the license and copyright notice must be included with the licensed material.**
-- Same license: **Modifications must be released under the same license when distributing the licensed material. In some cases a similar or related license may be used.**
-- State changes: **Changes made to the licensed material must be documented. Along with link to original source**
+```sh
+bash tests/test-xfreerdp-gui.sh
+```
 
----
-Open For Contribution
----
+The project is licensed under GNU GPL v3; see [LICENSE](./LICENSE).
